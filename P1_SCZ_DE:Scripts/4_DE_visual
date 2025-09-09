@@ -1,0 +1,75 @@
+# conda activate r_env
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(cowplot)
+library(ggplot2)
+library(dplyr) 
+library(tidyr)
+library(stringr)
+
+setwd("P1_SCZ_DE")
+
+
+# Reload the DE objects
+de_ofc     <- readRDS("Files/DE_OFC_Vuln_withinDx.rds")
+de_bat     <- readRDS("Files/DE_Bat_Vuln_withinDx.rds")
+de_mclean  <- readRDS("Files/DE_McLean_Vuln_withinDx.rds")
+de_mtsinai <- readRDS("Files/DE_MtSinai_Vuln_withinDx.rds")
+
+# Extract only significant genes (FDR < 0.05) with logFC
+sig_ofc_ctrl     <- subset(de_ofc$Control,        adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+sig_ofc_scz      <- subset(de_ofc$Schizophrenia,  adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+
+sig_bat_ctrl     <- subset(de_bat$Control,        adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+sig_bat_scz      <- subset(de_bat$Schizophrenia,  adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+
+sig_mclean_ctrl  <- subset(de_mclean$Control,     adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+sig_mclean_scz   <- subset(de_mclean$Schizophrenia, adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+
+sig_mtsinai_ctrl <- subset(de_mtsinai$Control,    adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+sig_mtsinai_scz  <- subset(de_mtsinai$Schizophrenia, adj.P.Val < 0.05)[, c("logFC","adj.P.Val")]
+
+# Put all into a list
+all_sig <- list(
+  OFC_Control        = sig_ofc_ctrl,
+  OFC_SCZ            = sig_ofc_scz,
+  Bat_Control        = sig_bat_ctrl,
+  Bat_SCZ            = sig_bat_scz,
+  McLean_Control     = sig_mclean_ctrl,
+  McLean_SCZ         = sig_mclean_scz,
+  MtSinai_Control    = sig_mtsinai_ctrl,
+  MtSinai_SCZ        = sig_mtsinai_scz
+)
+
+# 1. Find the intersection of gene names across all sets
+common_genes <- Reduce(intersect, lapply(all_sig, rownames))
+
+# 2. Subset each table to common genes
+common_list <- lapply(all_sig, function(x) x[common_genes, , drop = FALSE])
+
+# 3. Combine logFC into one matrix
+logFC_mat <- do.call(cbind, lapply(common_list, function(x) x$logFC))
+colnames(logFC_mat) <- names(common_list)
+rownames(logFC_mat) <- common_genes
+
+# 4. Check direction consistency
+all_up   <- rownames(logFC_mat)[apply(logFC_mat, 1, function(x) all(x > 0))]
+all_down <- rownames(logFC_mat)[apply(logFC_mat, 1, function(x) all(x < 0))]
+
+
+#Go 
+
+genes_union_sym <- unique(c(all_up, all_down))
+
+ego_union <- enrichGO(gene          = genes_union_sym,
+                      OrgDb         = org.Hs.eg.db,
+                      keyType       = "SYMBOL",
+                      ont           = "BP",
+                      pAdjustMethod = "BH",
+                      pvalueCutoff  = 0.05,
+                      qvalueCutoff  = 0.05)
+
+
+ p <- barplot(ego_union, showCategory = 5, title = "GO: Affected v Unaffected")
+ggsave("Figures/GO_Affected_vs_Unaffected_in_all.png", p, width = 14, height = 10, dpi = 300)

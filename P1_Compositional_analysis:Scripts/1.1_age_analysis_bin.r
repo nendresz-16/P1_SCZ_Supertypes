@@ -352,3 +352,9 @@ combined_plot <- p1 / p2
 
 # Save combined figure
 ggsave("Figures/Sst_meta_analysis_age_stratified.png", combined_plot, width = 12, height = 10)
+
+
+
+
+
+
